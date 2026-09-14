@@ -91,6 +91,15 @@ db.exec(`
     description TEXT,
     updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS company_settings (
+    companyId TEXT NOT NULL,
+    key TEXT NOT NULL,
+    value TEXT NOT NULL,
+    updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (companyId, key),
+    FOREIGN KEY(companyId) REFERENCES companies(id) ON DELETE CASCADE
+  );
 `);
 
 // Migração segura para bancos existentes (adiciona companyId e role se ainda não existirem)

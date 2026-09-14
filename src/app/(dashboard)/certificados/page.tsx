@@ -39,6 +39,7 @@ interface Certificate {
   notes?: string;
   companyId?: string;
   companyName?: string;
+  companyWhatsappTemplate?: string | null;
 }
 
 interface ClientOption {
@@ -278,11 +279,13 @@ export default function CertificadosPage() {
 
   const handleSendWhatsApp = (cert: Certificate) => {
     const days = getDaysRemaining(cert.expirationDate);
-    const link = generateWhatsAppLink(cert.clientPhone, whatsappTemplate, {
+    const templateToUse = cert.companyWhatsappTemplate || whatsappTemplate;
+    const link = generateWhatsAppLink(cert.clientPhone, templateToUse, {
       clientName: cert.clientTradeName || cert.clientName,
       certType: cert.type,
       expirationDate: cert.expirationDate,
       daysRemaining: days,
+      companyName: cert.companyName || undefined,
     });
     window.open(link, '_blank');
   };

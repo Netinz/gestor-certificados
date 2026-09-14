@@ -15,9 +15,13 @@ export async function GET(
       c.name as clientName, 
       c.tradeName as clientTradeName, 
       c.phone as clientPhone,
-      c.document as clientDocument
+      c.document as clientDocument,
+      comp.name as companyName,
+      cs.value as companyWhatsappTemplate
     FROM certificates cert
     JOIN clients c ON cert.clientId = c.id
+    LEFT JOIN companies comp ON cert.companyId = comp.id
+    LEFT JOIN company_settings cs ON cs.companyId = cert.companyId AND cs.key = 'whatsapp_template'
     WHERE cert.id = ?
   `).get(id);
 

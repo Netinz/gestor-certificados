@@ -1,4 +1,4 @@
-﻿export function formatDocument(value: string): string {
+export function formatDocument(value: string): string {
   if (!value) return '';
   const clean = value.replace(/\D/g, '');
   if (clean.length === 11) {
@@ -47,6 +47,7 @@ export function generateWhatsAppLink(
     certType: string;
     expirationDate: string;
     daysRemaining: number;
+    companyName?: string;
   }
 ): string {
   let cleanPhone = phone.replace(/\D/g, '');
@@ -59,6 +60,9 @@ export function generateWhatsAppLink(
   text = text.replace(/\$TipoCertificado/gi, params.certType);
   text = text.replace(/\$DataVencimento/gi, formatDateBR(params.expirationDate));
   text = text.replace(/\$DiasRestantes/gi, String(params.daysRemaining));
+  if (params.companyName) {
+    text = text.replace(/\$NomeEmpresa/gi, params.companyName);
+  }
 
   return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`;
 }

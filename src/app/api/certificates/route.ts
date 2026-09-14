@@ -24,10 +24,12 @@ export async function GET(request: Request) {
       c.tradeName as clientTradeName, 
       c.phone as clientPhone,
       c.document as clientDocument,
-      comp.name as companyName
+      comp.name as companyName,
+      cs.value as companyWhatsappTemplate
     FROM certificates cert
     JOIN clients c ON cert.clientId = c.id
     LEFT JOIN companies comp ON cert.companyId = comp.id
+    LEFT JOIN company_settings cs ON cs.companyId = cert.companyId AND cs.key = 'whatsapp_template'
     WHERE 1=1
   `;
   const params: any[] = [];
