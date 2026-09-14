@@ -1,4 +1,4 @@
-﻿import { NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import db from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { randomUUID } from 'crypto';
@@ -12,17 +12,30 @@ export async function GET(request: Request) {
   const filter = searchParams.get('filter'); // '30days', '15days', 'expired'
   const search = searchParams.get('q');
 
+  const filterCompanyId = searchParams.get('companyId');
+
+  const targetCompanyId = session.role === 'SUPER_ADMIN'
+    ? (filterCompanyId || null)
+    : session.companyId;
+
   let query = `
     SELECT cert.*, 
       c.name as clientName, 
       c.tradeName as clientTradeName, 
       c.phone as clientPhone,
-      c.document as clientDocument
+      c.document as clientDocument,
+      comp.name as companyName
     FROM certificates cert
     JOIN clients c ON cert.clientId = c.id
+    LEFT JOIN companies comp ON cert.companyId = comp.id
     WHERE 1=1
   `;
   const params: any[] = [];
+
+  if (targetCompanyId) {
+    query += ' AND cert.companyId = ?';
+    params.push(targetCompanyId);
+  }
 
   if (clientId) {
     query += ' AND cert.clientId = ?';
@@ -88,14 +101,19 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
+    // Obter a empresa do cliente associado para manter coerência
+    const client = db.prepare('SELECT companyId FROM clients WHERE id = ?').get(clientId) as any;
+    const certCompanyId = client?.companyId || session.companyId || 'company-default';
+
     const id = randomUUID();
     db.prepare(`
       INSERT INTO certificates (
-        id, clientId, type, issuer, status, issueDate, expirationDate,
+        id, companyId, clientId, type, issuer, status, issueDate, expirationDate,
         attachmentUrl, attachmentName, passwordHint, notes
-      ) VALUES (?, ?, ?, ?, 'ACTIVE', ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, 'ACTIVE', ?, ?, ?, ?, ?, ?)
     `).run(
       id,
+      certCompanyId,
       clientId,
       type,
       issuer || null,

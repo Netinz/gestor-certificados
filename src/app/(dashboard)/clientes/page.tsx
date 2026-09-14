@@ -37,12 +37,17 @@ interface Client {
   state?: string;
   notes?: string;
   certificateCount?: number;
+  companyId?: string;
+  companyName?: string;
 }
 
 export default function ClientesPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [companies, setCompanies] = useState<any[]>([]);
+  const [companyFilter, setCompanyFilter] = useState('ALL');
   
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -68,17 +73,39 @@ export default function ClientesPage() {
     city: '',
     state: '',
     notes: '',
+    companyId: '',
   });
 
   useEffect(() => {
+    fetch('/api/auth/me')
+      .then(r => r.json())
+      .then(d => {
+        if (d?.user) {
+          setCurrentUser(d.user);
+          if (d.user.role === 'SUPER_ADMIN') {
+            fetch('/api/companies')
+              .then(cr => cr.json())
+              .then(cd => {
+                if (Array.isArray(cd)) setCompanies(cd);
+              })
+              .catch(() => {});
+          }
+        }
+      })
+      .catch(() => {});
+
     loadClients();
   }, []);
 
-  const loadClients = async (search = '') => {
+  const loadClients = async (search = searchTerm, compFilter = companyFilter) => {
     setLoading(true);
     try {
-      const url = search ? `/api/clients?q=${encodeURIComponent(search)}` : '/api/clients';
-      const res = await fetch(url);
+      const params = new URLSearchParams();
+      if (search) params.append('q', search);
+      if (compFilter && compFilter !== 'ALL') params.append('companyId', compFilter);
+
+      const queryStr = params.toString() ? `?${params.toString()}` : '';
+      const res = await fetch(`/api/clients${queryStr}`);
       const data = await res.json();
       if (Array.isArray(data)) {
         setClients(data);
@@ -92,7 +119,7 @@ export default function ClientesPage() {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    loadClients(searchTerm);
+    loadClients(searchTerm, companyFilter);
   };
 
   const openNewModal = () => {
@@ -111,6 +138,7 @@ export default function ClientesPage() {
       city: '',
       state: '',
       notes: '',
+      companyId: companies[0]?.id || '',
     });
     setError('');
     setSuccess('');
@@ -133,6 +161,7 @@ export default function ClientesPage() {
       city: client.city || '',
       state: client.state || '',
       notes: client.notes || '',
+      companyId: client.companyId || '',
     });
     setError('');
     setSuccess('');
@@ -302,7 +331,7 @@ export default function ClientesPage() {
 
       {/* Barra de Pesquisa */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
-        <form onSubmit={handleSearch} className="flex gap-3">
+        <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
             <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
             <input
@@ -313,6 +342,21 @@ export default function ClientesPage() {
               className="w-full pl-10 pr-4 py-2 bg-slate-800/80 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
             />
           </div>
+          {currentUser?.role === 'SUPER_ADMIN' && companies.length > 0 && (
+            <select
+              value={companyFilter}
+              onChange={(e) => {
+                setCompanyFilter(e.target.value);
+                loadClients(searchTerm, e.target.value);
+              }}
+              className="px-3.5 py-2 bg-slate-800/80 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 max-w-xs"
+            >
+              <option value="ALL">Todas as Empresas</option>
+              {companies.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          )}
           <button
             type="submit"
             className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium rounded-xl transition border border-slate-700"
@@ -322,7 +366,7 @@ export default function ClientesPage() {
           {searchTerm && (
             <button
               type="button"
-              onClick={() => { setSearchTerm(''); loadClients(''); }}
+              onClick={() => { setSearchTerm(''); loadClients('', companyFilter); }}
               className="px-3 py-2 bg-slate-800/50 hover:bg-slate-800 text-slate-400 hover:text-white text-sm rounded-xl transition"
             >
               Limpar
@@ -368,9 +412,17 @@ export default function ClientesPage() {
                       {client.type === 'PJ' ? <Building2 size={20} /> : <User size={20} />}
                     </div>
                     <div>
-                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">
-                        {client.type === 'PJ' ? 'Pessoa Jurídica' : 'Pessoa Física'}
-                      </span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">
+                          {client.type === 'PJ' ? 'Pessoa Jurídica' : 'Pessoa Física'}
+                        </span>
+                        {client.companyName && (
+                          <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
+                            <Building2 size={10} />
+                            {client.companyName}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition">
@@ -470,6 +522,27 @@ export default function ClientesPage() {
                 <div className="p-3.5 bg-emerald-950/50 border border-emerald-800/80 rounded-xl text-emerald-200 text-xs flex items-center gap-2">
                   <CheckCircle2 size={16} className="shrink-0 text-emerald-400" />
                   <span>{success}</span>
+                </div>
+              )}
+
+              {/* Seletor de Empresa para Super Admin */}
+              {currentUser?.role === 'SUPER_ADMIN' && !editingClient && (
+                <div>
+                  <label className="block text-xs font-semibold uppercase text-slate-400 mb-1.5">
+                    Empresa Vinculada (Tenant) <span className="text-emerald-400">*</span>
+                  </label>
+                  <div className="relative">
+                    <Building2 size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                    <select
+                      value={formData.companyId}
+                      onChange={(e) => setFormData({ ...formData, companyId: e.target.value })}
+                      className="w-full pl-9 pr-3.5 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    >
+                      {companies.map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               )}
 

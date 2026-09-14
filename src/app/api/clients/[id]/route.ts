@@ -1,4 +1,4 @@
-﻿import { NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import db from '@/lib/db';
 import { getSession } from '@/lib/auth';
 
@@ -10,10 +10,14 @@ export async function GET(
   if (!session) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
   const { id } = await params;
-  const client = db.prepare('SELECT * FROM clients WHERE id = ?').get(id);
+  const client: any = db.prepare('SELECT * FROM clients WHERE id = ?').get(id);
 
   if (!client) {
     return NextResponse.json({ error: 'Cliente não encontrado' }, { status: 404 });
+  }
+
+  if (session.role !== 'SUPER_ADMIN' && client.companyId !== session.companyId) {
+    return NextResponse.json({ error: 'Acesso negado' }, { status: 403 });
   }
 
   const certificates = db.prepare(`
@@ -31,6 +35,15 @@ export async function PUT(
   if (!session) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
   const { id } = await params;
+  const existingClient: any = db.prepare('SELECT * FROM clients WHERE id = ?').get(id);
+  if (!existingClient) {
+    return NextResponse.json({ error: 'Cliente não encontrado' }, { status: 404 });
+  }
+
+  if (session.role !== 'SUPER_ADMIN' && existingClient.companyId !== session.companyId) {
+    return NextResponse.json({ error: 'Acesso negado' }, { status: 403 });
+  }
+
   const data = await request.json();
 
   const {
@@ -50,6 +63,14 @@ export async function PUT(
   } = data;
 
   const cleanDoc = document ? document.replace(/\D/g, '') : null;
+
+  if (cleanDoc && cleanDoc !== existingClient.document) {
+    const duplicate = db.prepare('SELECT id FROM clients WHERE document = ? AND companyId = ? AND id != ?')
+      .get(cleanDoc, existingClient.companyId, id);
+    if (duplicate) {
+      return NextResponse.json({ error: 'Já existe outro cliente com este documento nesta empresa.' }, { status: 400 });
+    }
+  }
 
   db.prepare(`
     UPDATE clients SET
@@ -97,6 +118,15 @@ export async function DELETE(
   if (!session) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
   const { id } = await params;
+  const existingClient: any = db.prepare('SELECT * FROM clients WHERE id = ?').get(id);
+  if (!existingClient) {
+    return NextResponse.json({ error: 'Cliente não encontrado' }, { status: 404 });
+  }
+
+  if (session.role !== 'SUPER_ADMIN' && existingClient.companyId !== session.companyId) {
+    return NextResponse.json({ error: 'Acesso negado' }, { status: 403 });
+  }
+
   db.prepare('DELETE FROM clients WHERE id = ?').run(id);
   return NextResponse.json({ success: true });
 }

@@ -9,26 +9,36 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const search = searchParams.get('q') || '';
+  const filterCompanyId = searchParams.get('companyId');
 
-  let clients;
-  if (search) {
-    const term = `%${search}%`;
-    clients = db.prepare(`
-      SELECT c.*, 
-        (SELECT COUNT(*) FROM certificates WHERE clientId = c.id) as certificateCount
-      FROM clients c
-      WHERE c.name LIKE ? OR c.tradeName LIKE ? OR c.document LIKE ? OR c.phone LIKE ?
-      ORDER BY c.name ASC
-    `).all(term, term, term, term);
-  } else {
-    clients = db.prepare(`
-      SELECT c.*, 
-        (SELECT COUNT(*) FROM certificates WHERE clientId = c.id) as certificateCount
-      FROM clients c
-      ORDER BY c.name ASC
-    `).all();
+  // Se for super admin, pode ver de uma empresa específica ou de todas; se for usuário de empresa, só vê da sua
+  const targetCompanyId = session.role === 'SUPER_ADMIN' 
+    ? (filterCompanyId || null) 
+    : session.companyId;
+
+  let query = `
+    SELECT c.*, comp.name as companyName,
+      (SELECT COUNT(*) FROM certificates WHERE clientId = c.id) as certificateCount
+    FROM clients c
+    LEFT JOIN companies comp ON c.companyId = comp.id
+    WHERE 1=1
+  `;
+  const params: any[] = [];
+
+  if (targetCompanyId) {
+    query += ' AND c.companyId = ?';
+    params.push(targetCompanyId);
   }
 
+  if (search) {
+    query += ' AND (c.name LIKE ? OR c.tradeName LIKE ? OR c.document LIKE ? OR c.phone LIKE ?)';
+    const term = `%${search}%`;
+    params.push(term, term, term, term);
+  }
+
+  query += ' ORDER BY c.name ASC';
+
+  const clients = db.prepare(query).all(...params);
   return NextResponse.json(clients);
 }
 
@@ -39,6 +49,7 @@ export async function POST(request: Request) {
   try {
     const data = await request.json();
     const {
+      companyId,
       type,
       document,
       name,
@@ -59,21 +70,25 @@ export async function POST(request: Request) {
     }
 
     const cleanDoc = document.replace(/\D/g, '');
+    const clientCompanyId = session.role === 'SUPER_ADMIN' 
+      ? (companyId || session.companyId || 'company-default') 
+      : session.companyId;
 
-    // Verificar duplicidade de documento
-    const existing = db.prepare('SELECT id FROM clients WHERE document = ?').get(cleanDoc);
+    // Verificar duplicidade de documento DENTRO da mesma empresa
+    const existing = db.prepare('SELECT id FROM clients WHERE document = ? AND companyId = ?').get(cleanDoc, clientCompanyId);
     if (existing) {
-      return NextResponse.json({ error: 'Já existe um cliente cadastrado com este CPF/CNPJ.' }, { status: 400 });
+      return NextResponse.json({ error: 'Já existe um cliente cadastrado com este CPF/CNPJ nesta empresa.' }, { status: 400 });
     }
 
     const id = randomUUID();
     db.prepare(`
       INSERT INTO clients (
-        id, type, document, name, tradeName, email, phone, 
+        id, companyId, type, document, name, tradeName, email, phone, 
         zipCode, address, number, neighborhood, city, state, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
+      clientCompanyId,
       type || (cleanDoc.length === 14 ? 'PJ' : 'PF'),
       cleanDoc,
       name.trim(),

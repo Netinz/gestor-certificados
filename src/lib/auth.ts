@@ -1,4 +1,4 @@
-﻿import jwt from 'jsonwebtoken';
+import jwt from 'jsonwebtoken';
 import { cookies } from 'next/headers';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'super-segredo-gestao-certificados-2026-auth-token';
@@ -7,6 +7,9 @@ export interface UserSession {
   id: string;
   username: string;
   name: string;
+  role: 'SUPER_ADMIN' | 'COMPANY_ADMIN' | 'USER';
+  companyId?: string | null;
+  companyName?: string | null;
 }
 
 export function signSession(user: UserSession): string {

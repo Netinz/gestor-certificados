@@ -1,4 +1,4 @@
-﻿import { NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import db from '@/lib/db';
 import { getSession } from '@/lib/auth';
 import { randomUUID } from 'crypto';
@@ -21,6 +21,10 @@ export async function POST(
   const cert = db.prepare('SELECT * FROM certificates WHERE id = ?').get(id) as any;
   if (!cert) {
     return NextResponse.json({ error: 'Certificado não encontrado' }, { status: 404 });
+  }
+
+  if (session.role !== 'SUPER_ADMIN' && cert.companyId !== session.companyId) {
+    return NextResponse.json({ error: 'Acesso negado' }, { status: 403 });
   }
 
   const previousDate = cert.expirationDate;

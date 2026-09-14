@@ -28,6 +28,8 @@ interface Certificate {
   status: string;
   expirationDate: string;
   notes?: string;
+  companyId?: string;
+  companyName?: string;
 }
 
 export default function VencimentosPage() {
@@ -35,16 +37,40 @@ export default function VencimentosPage() {
   const [loading, setLoading] = useState(true);
   const [filterTab, setFilterTab] = useState<'all' | '15days' | '30days' | 'expired'>('all');
   const [whatsappTemplate, setWhatsappTemplate] = useState('');
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [companies, setCompanies] = useState<any[]>([]);
+  const [companyFilter, setCompanyFilter] = useState('ALL');
 
   useEffect(() => {
+    fetch('/api/auth/me')
+      .then(r => r.json())
+      .then(d => {
+        if (d?.user) {
+          setCurrentUser(d.user);
+          if (d.user.role === 'SUPER_ADMIN') {
+            fetch('/api/companies')
+              .then(cr => cr.json())
+              .then(cd => {
+                if (Array.isArray(cd)) setCompanies(cd);
+              })
+              .catch(() => {});
+          }
+        }
+      })
+      .catch(() => {});
+
     loadData();
   }, []);
 
-  const loadData = async () => {
+  const loadData = async (compFilter = companyFilter) => {
     setLoading(true);
     try {
+      const certUrl = compFilter && compFilter !== 'ALL' 
+        ? `/api/certificates?companyId=${encodeURIComponent(compFilter)}`
+        : '/api/certificates';
+
       const [certRes, settingsRes] = await Promise.all([
-        fetch('/api/certificates'),
+        fetch(certUrl),
         fetch('/api/settings')
       ]);
       const [certData, settingsData] = await Promise.all([
@@ -96,14 +122,34 @@ export default function VencimentosPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight flex items-center gap-3">
-          <Clock className="text-emerald-400" />
-          Painel de Vencimentos
-        </h1>
-        <p className="text-slate-400 text-sm mt-1">
-          Acompanhamento inteligente e proativo do ciclo de vida dos certificados digitais.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight flex items-center gap-3">
+            <Clock className="text-emerald-400" />
+            Painel de Vencimentos
+          </h1>
+          <p className="text-slate-400 text-sm mt-1">
+            Acompanhamento inteligente e proativo do ciclo de vida dos certificados digitais.
+          </p>
+        </div>
+        {currentUser?.role === 'SUPER_ADMIN' && companies.length > 0 && (
+          <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 px-3 py-2 rounded-xl">
+            <Building2 size={16} className="text-emerald-400 shrink-0" />
+            <select
+              value={companyFilter}
+              onChange={(e) => {
+                setCompanyFilter(e.target.value);
+                loadData(e.target.value);
+              }}
+              className="bg-transparent text-sm text-slate-200 focus:outline-none cursor-pointer"
+            >
+              <option value="ALL" className="bg-slate-900 text-white">Todas as Empresas</option>
+              {companies.map((c) => (
+                <option key={c.id} value={c.id} className="bg-slate-900 text-white">{c.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* Cards de Métricas e Alertas */}
@@ -250,10 +296,16 @@ export default function VencimentosPage() {
               return (
                 <div key={cert.id} className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-800/30 transition">
                   <div className="space-y-1">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-bold text-white text-base">
                         {cert.clientTradeName || cert.clientName}
                       </span>
+                      {cert.companyName && (
+                        <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
+                          <Building2 size={10} />
+                          {cert.companyName}
+                        </span>
+                      )}
                       <span className="text-xs px-2 py-0.5 rounded-md bg-slate-800 text-slate-400 font-mono">
                         {formatDocument(cert.clientDocument)}
                       </span>

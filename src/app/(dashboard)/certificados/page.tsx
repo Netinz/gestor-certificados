@@ -16,7 +16,8 @@ import {
   Loader2,
   Calendar,
   Phone,
-  ShieldCheck
+  ShieldCheck,
+  Building2
 } from 'lucide-react';
 import { formatDocument, formatPhone, formatDateBR, getDaysRemaining, generateWhatsAppLink } from '@/lib/utils';
 
@@ -36,6 +37,8 @@ interface Certificate {
   attachmentName?: string;
   passwordHint?: string;
   notes?: string;
+  companyId?: string;
+  companyName?: string;
 }
 
 interface ClientOption {
@@ -51,6 +54,9 @@ export default function CertificadosPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [whatsappTemplate, setWhatsappTemplate] = useState('');
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [companies, setCompanies] = useState<any[]>([]);
+  const [companyFilter, setCompanyFilter] = useState('ALL');
 
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
   const [isRenewModalOpen, setIsRenewModalOpen] = useState(false);
@@ -84,16 +90,42 @@ export default function CertificadosPage() {
   });
 
   useEffect(() => {
+    fetch('/api/auth/me')
+      .then(r => r.json())
+      .then(d => {
+        if (d?.user) {
+          setCurrentUser(d.user);
+          if (d.user.role === 'SUPER_ADMIN') {
+            fetch('/api/companies')
+              .then(cr => cr.json())
+              .then(cd => {
+                if (Array.isArray(cd)) setCompanies(cd);
+              })
+              .catch(() => {});
+          }
+        }
+      })
+      .catch(() => {});
+
     loadData();
   }, []);
 
-  const loadData = async (search = '') => {
+  const loadData = async (search = searchTerm, compFilter = companyFilter) => {
     setLoading(true);
     try {
-      const url = search ? `/api/certificates?q=${encodeURIComponent(search)}` : '/api/certificates';
+      const certParams = new URLSearchParams();
+      if (search) certParams.append('q', search);
+      if (compFilter && compFilter !== 'ALL') certParams.append('companyId', compFilter);
+
+      const clientParams = new URLSearchParams();
+      if (compFilter && compFilter !== 'ALL') clientParams.append('companyId', compFilter);
+
+      const certUrl = `/api/certificates${certParams.toString() ? `?${certParams.toString()}` : ''}`;
+      const clientUrl = `/api/clients${clientParams.toString() ? `?${clientParams.toString()}` : ''}`;
+
       const [certRes, clientRes, settingsRes] = await Promise.all([
-        fetch(url),
-        fetch('/api/clients'),
+        fetch(certUrl),
+        fetch(clientUrl),
         fetch('/api/settings')
       ]);
 
@@ -292,7 +324,7 @@ export default function CertificadosPage() {
       </div>
 
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
-        <form onSubmit={(e) => { e.preventDefault(); loadData(searchTerm); }} className="flex gap-3">
+        <form onSubmit={(e) => { e.preventDefault(); loadData(searchTerm, companyFilter); }} className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
             <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
             <input
@@ -303,12 +335,36 @@ export default function CertificadosPage() {
               className="w-full pl-10 pr-4 py-2 bg-slate-800/80 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
             />
           </div>
+          {currentUser?.role === 'SUPER_ADMIN' && companies.length > 0 && (
+            <select
+              value={companyFilter}
+              onChange={(e) => {
+                setCompanyFilter(e.target.value);
+                loadData(searchTerm, e.target.value);
+              }}
+              className="px-3.5 py-2 bg-slate-800/80 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 max-w-xs"
+            >
+              <option value="ALL">Todas as Empresas</option>
+              {companies.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          )}
           <button
             type="submit"
             className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium rounded-xl transition border border-slate-700"
           >
             Buscar
           </button>
+          {searchTerm && (
+            <button
+              type="button"
+              onClick={() => { setSearchTerm(''); loadData('', companyFilter); }}
+              className="px-3 py-2 bg-slate-800/50 hover:bg-slate-800 text-slate-400 hover:text-white text-sm rounded-xl transition"
+            >
+              Limpar
+            </button>
+          )}
         </form>
       </div>
 
@@ -361,9 +417,17 @@ export default function CertificadosPage() {
                   {/* Cabeçalho do Card */}
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <h3 className="font-bold text-white text-base leading-tight">
-                        {cert.clientTradeName || cert.clientName}
-                      </h3>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="font-bold text-white text-base leading-tight">
+                          {cert.clientTradeName || cert.clientName}
+                        </h3>
+                        {cert.companyName && (
+                          <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
+                            <Building2 size={10} />
+                            {cert.companyName}
+                          </span>
+                        )}
+                      </div>
                       <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 mt-1">
                         <span className="font-mono text-slate-300">{formatDocument(cert.clientDocument)}</span>
                         {cert.clientPhone && (
