@@ -18,34 +18,97 @@ export async function GET(request: Request) {
   }
 
   try {
-    const res = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cleanCnpj}`, {
-      headers: { 'User-Agent': 'GestaoCertificados/1.0' },
-      next: { revalidate: 60 }
-    });
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      return NextResponse.json({ 
-        error: err.message || 'Erro ao consultar CNPJ na base pública.' 
-      }, { status: res.status });
+    // 1. Tentar primeiro na BrasilAPI
+    let dataBrasil: any = null;
+    try {
+      const res = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cleanCnpj}`, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+          'Accept': 'application/json'
+        },
+        next: { revalidate: 60 }
+      });
+      if (res.ok) {
+        dataBrasil = await res.json();
+      }
+    } catch (e) {
+      console.error('BrasilAPI error:', e);
     }
 
-    const data = await res.json();
+    // 2. Consultar ReceitaWS para complementar telefone, email, logradouro e número (que são mais completos lá)
+    let dataReceitaWS: any = null;
+    try {
+      const resWS = await fetch(`https://receitaws.com.br/v1/cnpj/${cleanCnpj}`, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+          'Accept': 'application/json'
+        },
+        next: { revalidate: 60 }
+      });
+      if (resWS.ok) {
+        dataReceitaWS = await resWS.json();
+      }
+    } catch (e) {
+      console.error('ReceitaWS error:', e);
+    }
 
-    // Formatar e padronizar os dados retornados
+    if (!dataBrasil && !dataReceitaWS) {
+      return NextResponse.json({ error: 'Não foi possível consultar os dados do CNPJ nos serviços públicos.' }, { status: 502 });
+    }
+
+    // Unificar e obter o dado mais rico de cada campo
+    const name = dataBrasil?.razao_social || dataReceitaWS?.nome || '';
+    const tradeName = dataBrasil?.nome_fantasia || dataReceitaWS?.fantasia || '';
+    const email = dataReceitaWS?.email || dataBrasil?.email || '';
+
+    // Telefone
+    let phone = '';
+    if (dataReceitaWS?.telefone) {
+      // ReceitaWS pode retornar múltiplos telefones separados por barra
+      const firstPhone = dataReceitaWS.telefone.split('/')[0].trim();
+      phone = firstPhone;
+    } else if (dataBrasil?.ddd_telefone_1) {
+      phone = dataBrasil.ddd_telefone_1.replace(/\s+/g, '');
+    }
+
+    // Endereço
+    const zipCode = (dataReceitaWS?.cep || dataBrasil?.cep || '').replace(/\D/g, '');
+    let address = dataReceitaWS?.logradouro || dataBrasil?.logradouro || '';
+    const number = dataReceitaWS?.numero || dataBrasil?.numero || '';
+    let neighborhood = dataReceitaWS?.bairro || dataBrasil?.bairro || '';
+    let city = dataReceitaWS?.municipio || dataBrasil?.municipio || '';
+    let state = dataReceitaWS?.uf || dataBrasil?.uf || '';
+
+    // Se o logradouro ainda estiver vazio, consultar ViaCEP pelo CEP
+    if ((!address || !neighborhood) && zipCode && zipCode.length === 8) {
+      try {
+        const cepRes = await fetch(`https://viacep.com.br/ws/${zipCode}/json/`);
+        if (cepRes.ok) {
+          const cepData = await cepRes.json();
+          if (!cepData.erro) {
+            address = address || cepData.logradouro || '';
+            neighborhood = neighborhood || cepData.bairro || '';
+            city = city || cepData.localidade || '';
+            state = state || cepData.uf || '';
+          }
+        }
+      } catch (e) {
+        console.error('ViaCEP lookup fallback error:', e);
+      }
+    }
+
     const formatted = {
       cnpj: cleanCnpj,
-      name: data.razao_social || data.nome_fantasia || '',
-      tradeName: data.nome_fantasia || '',
-      email: data.email || '',
-      phone: data.ddd_telefone_1 ? `${data.ddd_telefone_1.replace(/\s+/g, '')}` : '',
-      zipCode: data.cep || '',
-      address: data.logradouro || '',
-      number: data.numero || '',
-      neighborhood: data.bairro || '',
-      city: data.municipio || '',
-      state: data.uf || '',
-      situation: data.descricao_situacao_cadastral || '',
+      name,
+      tradeName,
+      email,
+      phone,
+      zipCode,
+      address,
+      number,
+      neighborhood,
+      city,
+      state,
     };
 
     return NextResponse.json(formatted);

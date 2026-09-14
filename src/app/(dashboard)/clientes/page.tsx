@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState, useEffect } from 'react';
 import { 
@@ -48,6 +48,7 @@ export default function ClientesPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [fetchingCnpj, setFetchingCnpj] = useState(false);
+  const [fetchingCep, setFetchingCep] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -138,7 +139,41 @@ export default function ClientesPage() {
     setIsModalOpen(true);
   };
 
-  // Busca automática na Receita Federal via BrasilAPI ao digitar CNPJ
+  // Busca automática de endereço ao preencher CEP
+  const handleCepLookup = async (cepValue: string) => {
+    const cleanCep = cepValue.replace(/\D/g, '');
+    if (cleanCep.length !== 8) return;
+
+    setFetchingCep(true);
+    try {
+      const res = await fetch(`/api/cep?cep=${cleanCep}`);
+      if (res.ok) {
+        const data = await res.json();
+        setFormData(prev => ({
+          ...prev,
+          zipCode: cleanCep,
+          address: data.address || prev.address,
+          neighborhood: data.neighborhood || prev.neighborhood,
+          city: data.city || prev.city,
+          state: data.state || prev.state,
+        }));
+      }
+    } catch (e) {
+      console.error('Erro na consulta do CEP:', e);
+    } finally {
+      setFetchingCep(false);
+    }
+  };
+
+  const handleZipCodeChange = (val: string) => {
+    setFormData(prev => ({ ...prev, zipCode: val }));
+    const clean = val.replace(/\D/g, '');
+    if (clean.length === 8) {
+      handleCepLookup(clean);
+    }
+  };
+
+  // Busca automática na Receita Federal via BrasilAPI + ReceitaWS ao digitar CNPJ
   const handleCnpjLookup = async (cnpjToSearch?: string) => {
     const raw = cnpjToSearch || formData.document;
     const clean = raw.replace(/\D/g, '');
@@ -548,12 +583,15 @@ export default function ClientesPage() {
                 <p className="text-xs font-bold uppercase text-slate-400 mb-3">Endereço (opcional)</p>
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                   <div>
-                    <label className="block text-[11px] text-slate-400 mb-1">CEP</label>
+                    <label className="block text-[11px] text-slate-400 mb-1 flex items-center justify-between">
+                      <span>CEP</span>
+                      {fetchingCep && <span className="text-[10px] text-emerald-400 animate-pulse">Buscando...</span>}
+                    </label>
                     <input
                       type="text"
                       placeholder="00000-000"
                       value={formData.zipCode}
-                      onChange={(e) => setFormData({ ...formData, zipCode: e.target.value })}
+                      onChange={(e) => handleZipCodeChange(e.target.value)}
                       className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                     />
                   </div>
