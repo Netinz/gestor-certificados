@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -34,11 +34,18 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* Botão Mobile */}
-      <div className="lg:hidden fixed top-4 left-4 z-50">
+      {/* Topbar Mobile elegante (evita sobreposição no título da página) */}
+      <div className="lg:hidden sticky top-0 z-40 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <div className="bg-emerald-500 text-slate-950 p-1.5 rounded-lg shadow-sm">
+            <ShieldCheck size={20} strokeWidth={2.4} />
+          </div>
+          <span className="font-bold text-white text-sm">CertManager</span>
+        </div>
         <button
           onClick={() => setMobileOpen(!mobileOpen)}
-          className="p-2 bg-slate-900 text-white rounded-lg shadow-md hover:bg-slate-800 transition"
+          className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl border border-slate-700 transition"
+          aria-label="Menu"
         >
           {mobileOpen ? <X size={20} /> : <Menu size={20} />}
         </button>

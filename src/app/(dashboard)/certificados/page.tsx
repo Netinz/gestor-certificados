@@ -13,7 +13,10 @@ import {
   History, 
   AlertTriangle, 
   X, 
-  Loader2
+  Loader2,
+  Calendar,
+  Phone,
+  ShieldCheck
 } from 'lucide-react';
 import { formatDocument, formatPhone, formatDateBR, getDaysRemaining, generateWhatsAppLink } from '@/lib/utils';
 
@@ -281,7 +284,7 @@ export default function CertificadosPage() {
             setIsNewModalOpen(true);
           }}
           disabled={clients.length === 0}
-          className="inline-flex items-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-4 py-2.5 rounded-xl font-semibold text-sm transition shadow-lg shadow-emerald-500/20 shrink-0 disabled:opacity-50"
+          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-4 py-2.5 rounded-xl font-semibold text-sm transition shadow-lg shadow-emerald-500/20 shrink-0 disabled:opacity-50"
         >
           <Plus size={18} />
           Cadastrar Certificado
@@ -327,129 +330,254 @@ export default function CertificadosPage() {
           </p>
         </div>
       ) : (
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-slate-800/50 text-slate-400 text-xs uppercase font-semibold border-b border-slate-800">
-                <tr>
-                  <th className="px-6 py-4">Cliente & Documento</th>
-                  <th className="px-6 py-4">Certificado & Emissor</th>
-                  <th className="px-6 py-4">Vencimento & Prazo</th>
-                  <th className="px-6 py-4">Anexo / Backup</th>
-                  <th className="px-6 py-4 text-right">Ações</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/60">
-                {certificates.map((cert) => {
-                  const days = getDaysRemaining(cert.expirationDate);
-                  const isExpired = days < 0;
-                  const is15Days = days >= 0 && days <= 15;
-                  const is30Days = days > 15 && days <= 30;
+        <div className="space-y-4">
+          {/* Visualização em Cards (Mobile e Telas Menores) */}
+          <div className="lg:hidden space-y-4">
+            {certificates.map((cert) => {
+              const days = getDaysRemaining(cert.expirationDate);
+              const isExpired = days < 0;
+              const is15Days = days >= 0 && days <= 15;
+              const is30Days = days > 15 && days <= 30;
 
-                  let badgeColor = 'bg-slate-800 text-slate-300 border-slate-700';
-                  let statusText = `${days} dias restantes`;
+              let badgeColor = 'bg-slate-800 text-slate-300 border-slate-700';
+              let statusText = `${days} dias restantes`;
 
-                  if (isExpired) {
-                    badgeColor = 'bg-red-950/60 text-red-300 border-red-800';
-                    statusText = `Vencido há ${Math.abs(days)} dias`;
-                  } else if (is15Days) {
-                    badgeColor = 'bg-amber-950/60 text-amber-300 border-amber-800 animate-pulse';
-                    statusText = `Vence em ${days} dias (Urgente)`;
-                  } else if (is30Days) {
-                    badgeColor = 'bg-blue-950/60 text-blue-300 border-blue-800';
-                    statusText = `Vence em ${days} dias`;
-                  }
+              if (isExpired) {
+                badgeColor = 'bg-red-950/60 text-red-300 border-red-800';
+                statusText = `Vencido há ${Math.abs(days)} dias`;
+              } else if (is15Days) {
+                badgeColor = 'bg-amber-950/60 text-amber-300 border-amber-800 animate-pulse';
+                statusText = `Vence em ${days} dias (Urgente)`;
+              } else if (is30Days) {
+                badgeColor = 'bg-blue-950/60 text-blue-300 border-blue-800';
+                statusText = `Vence em ${days} dias`;
+              }
 
-                  return (
-                    <tr key={cert.id} className="hover:bg-slate-800/30 transition">
-                      <td className="px-6 py-4">
-                        <div className="font-semibold text-white">
-                          {cert.clientTradeName || cert.clientName}
-                        </div>
-                        <div className="text-xs text-slate-400 flex items-center gap-2 mt-0.5">
-                          <span className="font-mono">{formatDocument(cert.clientDocument)}</span>
-                          <span>•</span>
-                          <span>{formatPhone(cert.clientPhone)}</span>
-                        </div>
-                      </td>
-
-                      <td className="px-6 py-4">
-                        <div className="font-medium text-slate-200">{cert.type}</div>
-                        <div className="text-xs text-slate-400">
-                          {cert.issuer || 'Autoridade Certificadora'}
-                        </div>
-                      </td>
-
-                      <td className="px-6 py-4">
-                        <div className="font-mono font-semibold text-white text-sm">
-                          {formatDateBR(cert.expirationDate)}
-                        </div>
-                        <div className={`mt-1 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border ${badgeColor}`}>
-                          {isExpired && <AlertTriangle size={12} />}
-                          {statusText}
-                        </div>
-                      </td>
-
-                      <td className="px-6 py-4">
-                        {cert.attachmentUrl ? (
-                          <a
-                            href={cert.attachmentUrl}
-                            download
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-emerald-400 rounded-lg text-xs font-medium transition border border-slate-700"
-                          >
-                            <FileText size={13} />
-                            Baixar Arquivo
-                          </a>
-                        ) : (
-                          <span className="text-xs text-slate-500 italic">Sem anexo</span>
+              return (
+                <div
+                  key={cert.id}
+                  className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-lg"
+                >
+                  {/* Cabeçalho do Card */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="font-bold text-white text-base leading-tight">
+                        {cert.clientTradeName || cert.clientName}
+                      </h3>
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 mt-1">
+                        <span className="font-mono text-slate-300">{formatDocument(cert.clientDocument)}</span>
+                        {cert.clientPhone && (
+                          <>
+                            <span>•</span>
+                            <span className="flex items-center gap-1">
+                              <Phone size={12} className="text-slate-500" />
+                              {formatPhone(cert.clientPhone)}
+                            </span>
+                          </>
                         )}
-                        {cert.passwordHint && (
-                          <div className="text-[11px] text-slate-400 mt-1">
-                            Senha/Dica: <span className="text-slate-300 font-mono">{cert.passwordHint}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Detalhes do Certificado */}
+                  <div className="grid grid-cols-2 gap-3 p-3 bg-slate-800/40 rounded-xl border border-slate-800/80 text-xs">
+                    <div>
+                      <span className="text-slate-400 text-[11px] block">Certificado</span>
+                      <strong className="text-slate-200 font-medium">{cert.type}</strong>
+                      <span className="text-slate-400 block text-[11px] mt-0.5">{cert.issuer || 'AC Geral'}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 text-[11px] block">Vencimento</span>
+                      <strong className="text-white font-mono">{formatDateBR(cert.expirationDate)}</strong>
+                      <div className={`mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border ${badgeColor}`}>
+                        {isExpired && <AlertTriangle size={10} />}
+                        {statusText}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Anexo / Senha se houver */}
+                  {(cert.attachmentUrl || cert.passwordHint) && (
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs pt-1">
+                      {cert.attachmentUrl ? (
+                        <a
+                          href={cert.attachmentUrl}
+                          download
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-emerald-400 rounded-xl font-medium border border-slate-700 transition"
+                        >
+                          <FileText size={14} />
+                          Baixar Anexo
+                        </a>
+                      ) : <div />}
+                      {cert.passwordHint && (
+                        <span className="text-slate-400 text-[11px]">
+                          Senha: <strong className="font-mono text-slate-200">{cert.passwordHint}</strong>
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Barra de Ações Mobile */}
+                  <div className="grid grid-cols-4 gap-2 pt-2 border-t border-slate-800">
+                    <button
+                      onClick={() => handleSendWhatsApp(cert)}
+                      className="flex flex-col items-center justify-center gap-1 py-2 px-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-xl border border-emerald-500/30 text-xs font-medium transition"
+                    >
+                      <MessageSquare size={16} />
+                      <span className="text-[10px]">WhatsApp</span>
+                    </button>
+                    <button
+                      onClick={() => openRenewModal(cert)}
+                      className="flex flex-col items-center justify-center gap-1 py-2 px-1 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-xl border border-blue-500/30 text-xs font-medium transition"
+                    >
+                      <RefreshCw size={16} />
+                      <span className="text-[10px]">Renovar</span>
+                    </button>
+                    <button
+                      onClick={() => openHistory(cert)}
+                      className="flex flex-col items-center justify-center gap-1 py-2 px-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl border border-slate-700 text-xs font-medium transition"
+                    >
+                      <History size={16} />
+                      <span className="text-[10px]">Histórico</span>
+                    </button>
+                    <button
+                      onClick={() => handleDelete(cert.id)}
+                      className="flex flex-col items-center justify-center gap-1 py-2 px-1 bg-red-950/30 hover:bg-red-950/60 text-red-400 rounded-xl border border-red-800/40 text-xs font-medium transition"
+                    >
+                      <Trash2 size={16} />
+                      <span className="text-[10px]">Excluir</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Visualização em Tabela Completa (Telas Maiores: lg+) */}
+          <div className="hidden lg:block bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-slate-800/50 text-slate-400 text-xs uppercase font-semibold border-b border-slate-800">
+                  <tr>
+                    <th className="px-6 py-4">Cliente & Documento</th>
+                    <th className="px-6 py-4">Certificado & Emissor</th>
+                    <th className="px-6 py-4">Vencimento & Prazo</th>
+                    <th className="px-6 py-4">Anexo / Backup</th>
+                    <th className="px-6 py-4 text-right">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  {certificates.map((cert) => {
+                    const days = getDaysRemaining(cert.expirationDate);
+                    const isExpired = days < 0;
+                    const is15Days = days >= 0 && days <= 15;
+                    const is30Days = days > 15 && days <= 30;
+
+                    let badgeColor = 'bg-slate-800 text-slate-300 border-slate-700';
+                    let statusText = `${days} dias restantes`;
+
+                    if (isExpired) {
+                      badgeColor = 'bg-red-950/60 text-red-300 border-red-800';
+                      statusText = `Vencido há ${Math.abs(days)} dias`;
+                    } else if (is15Days) {
+                      badgeColor = 'bg-amber-950/60 text-amber-300 border-amber-800 animate-pulse';
+                      statusText = `Vence em ${days} dias (Urgente)`;
+                    } else if (is30Days) {
+                      badgeColor = 'bg-blue-950/60 text-blue-300 border-blue-800';
+                      statusText = `Vence em ${days} dias`;
+                    }
+
+                    return (
+                      <tr key={cert.id} className="hover:bg-slate-800/30 transition">
+                        <td className="px-6 py-4">
+                          <div className="font-semibold text-white">
+                            {cert.clientTradeName || cert.clientName}
                           </div>
-                        )}
-                      </td>
+                          <div className="text-xs text-slate-400 flex items-center gap-2 mt-0.5">
+                            <span className="font-mono">{formatDocument(cert.clientDocument)}</span>
+                            <span>•</span>
+                            <span>{formatPhone(cert.clientPhone)}</span>
+                          </div>
+                        </td>
 
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            onClick={() => handleSendWhatsApp(cert)}
-                            title="Enviar WhatsApp de Renovação"
-                            className="p-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-xl transition border border-emerald-500/30"
-                          >
-                            <MessageSquare size={16} />
-                          </button>
+                        <td className="px-6 py-4">
+                          <div className="font-medium text-slate-200">{cert.type}</div>
+                          <div className="text-xs text-slate-400">
+                            {cert.issuer || 'Autoridade Certificadora'}
+                          </div>
+                        </td>
 
-                          <button
-                            onClick={() => openRenewModal(cert)}
-                            title="Renovar Certificado (Novo Ciclo)"
-                            className="p-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-xl transition border border-blue-500/30"
-                          >
-                            <RefreshCw size={16} />
-                          </button>
+                        <td className="px-6 py-4">
+                          <div className="font-mono font-semibold text-white text-sm">
+                            {formatDateBR(cert.expirationDate)}
+                          </div>
+                          <div className={`mt-1 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border ${badgeColor}`}>
+                            {isExpired && <AlertTriangle size={12} />}
+                            {statusText}
+                          </div>
+                        </td>
 
-                          <button
-                            onClick={() => openHistory(cert)}
-                            title="Ver Histórico de Renovações"
-                            className="p-2 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl transition"
-                          >
-                            <History size={16} />
-                          </button>
+                        <td className="px-6 py-4">
+                          {cert.attachmentUrl ? (
+                            <a
+                              href={cert.attachmentUrl}
+                              download
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-emerald-400 rounded-lg text-xs font-medium transition border border-slate-700"
+                            >
+                              <FileText size={13} />
+                              Baixar Arquivo
+                            </a>
+                          ) : (
+                            <span className="text-xs text-slate-500 italic">Sem anexo</span>
+                          )}
+                          {cert.passwordHint && (
+                            <div className="text-[11px] text-slate-400 mt-1">
+                              Senha/Dica: <span className="text-slate-300 font-mono">{cert.passwordHint}</span>
+                            </div>
+                          )}
+                        </td>
 
-                          <button
-                            onClick={() => handleDelete(cert.id)}
-                            title="Excluir Certificado"
-                            className="p-2 hover:bg-red-950/40 text-slate-400 hover:text-red-400 rounded-xl transition"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                        <td className="px-6 py-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => handleSendWhatsApp(cert)}
+                              title="Enviar WhatsApp de Renovação"
+                              className="p-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-xl transition border border-emerald-500/30"
+                            >
+                              <MessageSquare size={16} />
+                            </button>
+
+                            <button
+                              onClick={() => openRenewModal(cert)}
+                              title="Renovar Certificado (Novo Ciclo)"
+                              className="p-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-xl transition border border-blue-500/30"
+                            >
+                              <RefreshCw size={16} />
+                            </button>
+
+                            <button
+                              onClick={() => openHistory(cert)}
+                              title="Ver Histórico de Renovações"
+                              className="p-2 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl transition"
+                            >
+                              <History size={16} />
+                            </button>
+
+                            <button
+                              onClick={() => handleDelete(cert.id)}
+                              title="Excluir Certificado"
+                              className="p-2 hover:bg-red-950/40 text-slate-400 hover:text-red-400 rounded-xl transition"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
