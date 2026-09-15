@@ -24,7 +24,7 @@ interface Company {
   document: string | null;
   email: string | null;
   phone: string | null;
-  active: number;
+  active: boolean | number;
   createdAt: string;
   userCount?: number;
   clientCount?: number;
@@ -69,6 +69,8 @@ export default function CompaniesPage() {
     fetchCompanies();
   }, []);
 
+  const isCompanyActive = (comp: Company) => Boolean(comp.active) && (comp.active as any) !== 0;
+
   const openCreateModal = () => {
     setEditingCompany(null);
     setFormData({
@@ -89,7 +91,7 @@ export default function CompaniesPage() {
       document: comp.document || '',
       email: comp.email || '',
       phone: comp.phone || '',
-      active: comp.active
+      active: isCompanyActive(comp) ? 1 : 0
     });
     setErrorMsg('');
     setIsModalOpen(true);
@@ -112,7 +114,10 @@ export default function CompaniesPage() {
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: JSON.stringify({
+          ...formData,
+          active: formData.active === 1
+        })
       });
 
       const resData = await res.json();
@@ -146,11 +151,12 @@ export default function CompaniesPage() {
   };
 
   const toggleStatus = async (comp: Company) => {
+    const currentlyActive = isCompanyActive(comp);
     try {
       const res = await fetch(`/api/companies/${comp.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ active: comp.active === 1 ? 0 : 1 })
+        body: JSON.stringify({ active: !currentlyActive })
       });
       if (res.ok) {
         fetchCompanies();
@@ -171,7 +177,7 @@ export default function CompaniesPage() {
 
   const totalClients = companies.reduce((acc, c) => acc + (c.clientCount || 0), 0);
   const totalCertificates = companies.reduce((acc, c) => acc + (c.certificateCount || 0), 0);
-  const totalActive = companies.filter(c => c.active === 1).length;
+  const totalActive = companies.filter(isCompanyActive).length;
 
   return (
     <div className="space-y-6">
@@ -299,26 +305,31 @@ export default function CompaniesPage() {
                       </div>
                     </td>
                     <td className="px-6 py-4 text-center">
-                      <button
-                        onClick={() => toggleStatus(comp)}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition ${
-                          comp.active === 1
-                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30'
-                            : 'bg-rose-500/20 text-rose-400 border border-rose-500/30 hover:bg-rose-500/30'
-                        }`}
-                      >
-                        {comp.active === 1 ? (
-                          <>
-                            <CheckCircle size={13} />
-                            Ativa
-                          </>
-                        ) : (
-                          <>
-                            <XCircle size={13} />
-                            Inativa
-                          </>
-                        )}
-                      </button>
+                      {(() => {
+                        const active = isCompanyActive(comp);
+                        return (
+                          <button
+                            onClick={() => toggleStatus(comp)}
+                            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition ${
+                              active
+                                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30'
+                                : 'bg-rose-500/20 text-rose-400 border border-rose-500/30 hover:bg-rose-500/30'
+                            }`}
+                          >
+                            {active ? (
+                              <>
+                                <CheckCircle size={13} />
+                                Ativa
+                              </>
+                            ) : (
+                              <>
+                                <XCircle size={13} />
+                                Inativa
+                              </>
+                            )}
+                          </button>
+                        );
+                      })()}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">

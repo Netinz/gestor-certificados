@@ -123,7 +123,7 @@ export default function Sidebar() {
             </div>
             <div>
               <h1 className="font-bold text-white text-base leading-tight tracking-tight">CertManager</h1>
-              <p className="text-[11px] text-emerald-400 font-medium tracking-wide">MULTITENANT SAAS</p>
+              <p className="text-[11px] text-emerald-400 font-medium tracking-wide">AIRA SAAS</p>
             </div>
           </div>
 

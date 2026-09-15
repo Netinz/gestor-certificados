@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -6,7 +6,7 @@ import { ShieldCheck, Lock, User, AlertCircle, ArrowRight, Loader2 } from 'lucid
 
 export default function LoginPage() {
   const router = useRouter();
-  const [username, setUsername] = useState('admin');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -112,13 +112,6 @@ export default function LoginPage() {
               )}
             </button>
           </form>
-
-          <div className="mt-6 pt-5 border-t border-slate-800 text-center">
-            <p className="text-xs text-slate-500">
-              Credenciais iniciais padrão: <br />
-              <span className="font-mono text-slate-400">admin</span> / <span className="font-mono text-slate-400">admin123</span>
-            </p>
-          </div>
         </div>
       </div>
     </div>

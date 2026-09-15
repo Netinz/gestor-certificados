@@ -122,3 +122,14 @@ model CompanySetting {
   @@id([companyId, key])
   @@map("company_settings")
 }
+
+model CertificateAttachment {
+  id          String   @id @default(uuid())
+  name        String
+  contentType String
+  data        Bytes
+  size        Int
+  createdAt   DateTime @default(now())
+
+  @@map("certificate_attachments")
+}

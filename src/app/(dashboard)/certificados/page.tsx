@@ -49,6 +49,21 @@ interface ClientOption {
   phone: string;
 }
 
+const CERTIFICATE_ISSUERS = [
+  'Certisign',
+  'Serasa Experian',
+  'Soluti',
+  'Valid Certificadora',
+  'Safeweb',
+  'DigitalSign',
+  'AC OAB',
+  'AC Federal / Caixa',
+  'AC Notarial',
+  'Fenacon CD',
+  'BirdID / SafeID',
+  'Outra (especificar)',
+];
+
 export default function CertificadosPage() {
   const [certificates, setCertificates] = useState<Certificate[]>([]);
   const [clients, setClients] = useState<ClientOption[]>([]);
@@ -62,6 +77,7 @@ export default function CertificadosPage() {
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
   const [isRenewModalOpen, setIsRenewModalOpen] = useState(false);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  const [isCustomIssuer, setIsCustomIssuer] = useState(false);
   const [selectedCert, setSelectedCert] = useState<Certificate | null>(null);
   const [certHistories, setCertHistories] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
@@ -315,6 +331,7 @@ export default function CertificadosPage() {
               passwordHint: '',
               notes: '',
             });
+            setIsCustomIssuer(false);
             setError('');
             setIsNewModalOpen(true);
           }}
@@ -713,13 +730,40 @@ export default function CertificadosPage() {
                   <label className="block text-xs font-semibold uppercase text-slate-400 mb-1.5">
                     Autoridade Certificadora
                   </label>
-                  <input
-                    type="text"
-                    placeholder="Ex: Certisign, Serasa, Soluti..."
-                    value={formData.issuer}
-                    onChange={(e) => setFormData({ ...formData, issuer: e.target.value })}
+                  <select
+                    value={
+                      isCustomIssuer || !CERTIFICATE_ISSUERS.slice(0, -1).includes(formData.issuer)
+                        ? 'Outra (especificar)'
+                        : formData.issuer
+                    }
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === 'Outra (especificar)') {
+                        setIsCustomIssuer(true);
+                        setFormData({ ...formData, issuer: '' });
+                      } else {
+                        setIsCustomIssuer(false);
+                        setFormData({ ...formData, issuer: val });
+                      }
+                    }}
                     className="w-full px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                  />
+                  >
+                    {CERTIFICATE_ISSUERS.map((iss) => (
+                      <option key={iss} value={iss}>
+                        {iss}
+                      </option>
+                    ))}
+                  </select>
+
+                  {(isCustomIssuer || (!CERTIFICATE_ISSUERS.slice(0, -1).includes(formData.issuer) && formData.issuer !== '')) && (
+                    <input
+                      type="text"
+                      placeholder="Digite o nome da certificadora..."
+                      value={formData.issuer}
+                      onChange={(e) => setFormData({ ...formData, issuer: e.target.value })}
+                      className="w-full mt-2 px-3 py-2 bg-slate-800/90 border border-slate-700 rounded-xl text-white text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none placeholder-slate-500"
+                    />
+                  )}
                 </div>
               </div>
 
