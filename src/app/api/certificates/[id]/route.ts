@@ -10,36 +10,47 @@ export async function GET(
   if (!session) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
   const { id } = await params;
-  const cert: any = db.prepare(`
-    SELECT cert.*, 
-      c.name as clientName, 
-      c.tradeName as clientTradeName, 
-      c.phone as clientPhone,
-      c.document as clientDocument,
-      comp.name as companyName,
-      cs.value as companyWhatsappTemplate
-    FROM certificates cert
-    JOIN clients c ON cert.clientId = c.id
-    LEFT JOIN companies comp ON cert.companyId = comp.id
-    LEFT JOIN company_settings cs ON cs.companyId = cert.companyId AND cs.key = 'whatsapp_template'
-    WHERE cert.id = ?
-  `).get(id);
+  try {
+    const cert = await db.certificate.findUnique({
+      where: { id },
+      include: {
+        client: true,
+        company: {
+          include: {
+            settings: {
+              where: { key: 'whatsapp_template' },
+            },
+          },
+        },
+        history: {
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    });
 
-  if (!cert) {
-    return NextResponse.json({ error: 'Certificado não encontrado' }, { status: 404 });
+    if (!cert) {
+      return NextResponse.json({ error: 'Certificado não encontrado' }, { status: 404 });
+    }
+
+    if (session.role !== 'SUPER_ADMIN' && cert.companyId !== session.companyId) {
+      return NextResponse.json({ error: 'Acesso negado' }, { status: 403 });
+    }
+
+    const formatted = {
+      ...cert,
+      clientName: cert.client.name,
+      clientTradeName: cert.client.tradeName,
+      clientPhone: cert.client.phone,
+      clientDocument: cert.client.document,
+      companyName: cert.company?.name || null,
+      companyWhatsappTemplate: cert.company?.settings?.[0]?.value || null,
+      histories: cert.history,
+    };
+
+    return NextResponse.json(formatted);
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
-
-  if (session.role !== 'SUPER_ADMIN' && cert.companyId !== session.companyId) {
-    return NextResponse.json({ error: 'Acesso negado' }, { status: 403 });
-  }
-
-  const histories = db.prepare(`
-    SELECT * FROM certificate_history 
-    WHERE certificateId = ? 
-    ORDER BY createdAt DESC
-  `).all(id);
-
-  return NextResponse.json({ ...(cert as object), histories });
 }
 
 export async function PUT(
@@ -50,7 +61,7 @@ export async function PUT(
   if (!session) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
   const { id } = await params;
-  const existingCert: any = db.prepare('SELECT * FROM certificates WHERE id = ?').get(id);
+  const existingCert = await db.certificate.findUnique({ where: { id } });
   if (!existingCert) {
     return NextResponse.json({ error: 'Certificado não encontrado' }, { status: 404 });
   }
@@ -59,48 +70,39 @@ export async function PUT(
     return NextResponse.json({ error: 'Acesso negado' }, { status: 403 });
   }
 
-  const data = await request.json();
+  try {
+    const data = await request.json();
+    const {
+      type,
+      issuer,
+      status,
+      issueDate,
+      expirationDate,
+      attachmentUrl,
+      attachmentName,
+      passwordHint,
+      notes,
+    } = data;
 
-  const {
-    type,
-    issuer,
-    status,
-    issueDate,
-    expirationDate,
-    attachmentUrl,
-    attachmentName,
-    passwordHint,
-    notes
-  } = data;
+    const updated = await db.certificate.update({
+      where: { id },
+      data: {
+        type: type !== undefined ? type : undefined,
+        issuer: issuer !== undefined ? issuer : undefined,
+        status: status !== undefined ? status : undefined,
+        issueDate: issueDate !== undefined ? issueDate : undefined,
+        expirationDate: expirationDate !== undefined ? expirationDate : undefined,
+        attachmentUrl: attachmentUrl !== undefined ? attachmentUrl : undefined,
+        attachmentName: attachmentName !== undefined ? attachmentName : undefined,
+        passwordHint: passwordHint !== undefined ? passwordHint : undefined,
+        notes: notes !== undefined ? notes : undefined,
+      },
+    });
 
-  db.prepare(`
-    UPDATE certificates SET
-      type = COALESCE(?, type),
-      issuer = ?,
-      status = COALESCE(?, status),
-      issueDate = ?,
-      expirationDate = COALESCE(?, expirationDate),
-      attachmentUrl = COALESCE(?, attachmentUrl),
-      attachmentName = COALESCE(?, attachmentName),
-      passwordHint = ?,
-      notes = ?,
-      updatedAt = CURRENT_TIMESTAMP
-    WHERE id = ?
-  `).run(
-    type,
-    issuer,
-    status,
-    issueDate,
-    expirationDate,
-    attachmentUrl,
-    attachmentName,
-    passwordHint,
-    notes,
-    id
-  );
-
-  const updated = db.prepare('SELECT * FROM certificates WHERE id = ?').get(id);
-  return NextResponse.json(updated);
+    return NextResponse.json(updated);
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 }
 
 export async function DELETE(
@@ -111,7 +113,7 @@ export async function DELETE(
   if (!session) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
   const { id } = await params;
-  const existingCert: any = db.prepare('SELECT * FROM certificates WHERE id = ?').get(id);
+  const existingCert = await db.certificate.findUnique({ where: { id } });
   if (!existingCert) {
     return NextResponse.json({ error: 'Certificado não encontrado' }, { status: 404 });
   }
@@ -120,6 +122,10 @@ export async function DELETE(
     return NextResponse.json({ error: 'Acesso negado' }, { status: 403 });
   }
 
-  db.prepare('DELETE FROM certificates WHERE id = ?').run(id);
-  return NextResponse.json({ success: true });
+  try {
+    await db.certificate.delete({ where: { id } });
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 }

@@ -11,18 +11,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Informe usuário e senha.' }, { status: 400 });
     }
 
-    const user = db.prepare(`
-      SELECT u.*, c.name as companyName, c.active as companyActive
-      FROM users u
-      LEFT JOIN companies c ON u.companyId = c.id
-      WHERE u.username = ?
-    `).get(username) as any;
+    const user = await db.user.findUnique({
+      where: { username },
+      include: { company: true },
+    });
 
     if (!user || !bcrypt.compareSync(password, user.password)) {
       return NextResponse.json({ error: 'Usuário ou senha inválidos.' }, { status: 401 });
     }
 
-    if (user.companyActive === 0) {
+    if (user.company && user.company.active === false) {
       return NextResponse.json({ error: 'A empresa deste usuário encontra-se desativada.' }, { status: 403 });
     }
 
@@ -30,9 +28,9 @@ export async function POST(request: Request) {
       id: user.id,
       username: user.username,
       name: user.name,
-      role: user.role || 'COMPANY_ADMIN',
+      role: (user.role as any) || 'COMPANY_ADMIN',
       companyId: user.companyId || null,
-      companyName: user.companyName || null,
+      companyName: user.company?.name || null,
     });
 
     const response = NextResponse.json({
@@ -43,8 +41,8 @@ export async function POST(request: Request) {
         name: user.name,
         role: user.role,
         companyId: user.companyId,
-        companyName: user.companyName
-      }
+        companyName: user.company?.name || null,
+      },
     });
 
     response.cookies.set('auth_token', token, {
@@ -52,7 +50,7 @@ export async function POST(request: Request) {
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       path: '/',
-      maxAge: 60 * 60 * 24 * 7 // 7 dias
+      maxAge: 60 * 60 * 24 * 7, // 7 dias
     });
 
     return response;

@@ -1,0 +1,124 @@
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Company {
+  id           String               @id @default(uuid())
+  name         String
+  document     String?
+  email        String?
+  phone        String?
+  active       Boolean              @default(true)
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+  users        User[]
+  clients      Client[]
+  certificates Certificate[]
+  settings     CompanySetting[]
+
+  @@map("companies")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  username  String   @unique
+  password  String
+  name      String
+  role      String   @default("COMPANY_ADMIN") // 'SUPER_ADMIN', 'COMPANY_ADMIN', 'USER'
+  companyId String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@map("users")
+}
+
+model Client {
+  id           String        @id @default(uuid())
+  companyId    String?
+  type         String        @default("PJ") // 'PJ', 'PF'
+  document     String
+  name         String
+  tradeName    String?
+  email        String?
+  phone        String
+  zipCode      String?
+  address      String?
+  number       String?
+  neighborhood String?
+  city         String?
+  state        String?
+  notes        String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  company      Company?      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  certificates Certificate[]
+
+  @@map("clients")
+}
+
+model Certificate {
+  id             String               @id @default(uuid())
+  companyId      String?
+  clientId       String
+  type           String
+  issuer         String?
+  status         String               @default("ACTIVE") // 'ACTIVE', 'RENEWED'
+  issueDate      String?
+  expirationDate String
+  attachmentUrl  String?
+  attachmentName String?
+  passwordHint   String?
+  notes          String?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  client         Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  company        Company?             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  history        CertificateHistory[]
+
+  @@map("certificates")
+}
+
+model CertificateHistory {
+  id            String      @id @default(uuid())
+  certificateId String
+  action        String
+  previousDate  String?
+  newDate       String
+  notes         String?
+  createdAt     DateTime    @default(now())
+
+  certificate   Certificate @relation(fields: [certificateId], references: [id], onDelete: Cascade)
+
+  @@map("certificate_history")
+}
+
+model Setting {
+  key         String   @id
+  value       String
+  description String?
+  updatedAt   DateTime @updatedAt
+
+  @@map("settings")
+}
+
+model CompanySetting {
+  companyId String
+  key       String
+  value     String
+  updatedAt DateTime @updatedAt
+
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@id([companyId, key])
+  @@map("company_settings")
+}

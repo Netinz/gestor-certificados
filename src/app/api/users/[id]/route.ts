@@ -15,12 +15,11 @@ export async function PUT(
   }
 
   const { id } = await params;
-  const targetUser: any = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+  const targetUser = await db.user.findUnique({ where: { id } });
   if (!targetUser) {
     return NextResponse.json({ error: 'Usuário não encontrado.' }, { status: 404 });
   }
 
-  // Se for Company Admin, só pode gerenciar usuários da sua própria empresa
   if (session.role === 'COMPANY_ADMIN') {
     if (targetUser.companyId !== session.companyId) {
       return NextResponse.json({ error: 'Permissão negada para editar usuário de outra empresa.' }, { status: 403 });
@@ -42,7 +41,6 @@ export async function PUT(
         }
         newRole = role;
       } else if (session.role === 'SUPER_ADMIN') {
-        // Não permitir rebaixar a conta master admin
         if (targetUser.username === 'admin' && role !== 'SUPER_ADMIN') {
           return NextResponse.json({ error: 'Não é permitido alterar o nível de acesso do administrador mestre.' }, { status: 400 });
         }
@@ -57,44 +55,49 @@ export async function PUT(
 
     let newUsername = targetUser.username;
     if (username && username.trim().toLowerCase() !== targetUser.username) {
-      const existing = db.prepare('SELECT id FROM users WHERE username = ? AND id != ?').get(username.trim().toLowerCase(), id);
+      const cleanUsername = username.trim().toLowerCase();
+      const existing = await db.user.findFirst({
+        where: {
+          username: cleanUsername,
+          id: { not: id },
+        },
+      });
       if (existing) {
         return NextResponse.json({ error: 'Este nome de usuário já está em uso.' }, { status: 400 });
       }
-      newUsername = username.trim().toLowerCase();
+      newUsername = cleanUsername;
     }
+
+    const updateData: any = {
+      name: name ? name.trim() : targetUser.name,
+      username: newUsername,
+      role: newRole,
+      companyId: newCompanyId,
+    };
 
     if (password && password.trim()) {
-      const hashedPassword = bcrypt.hashSync(password, 10);
-      db.prepare(`
-        UPDATE users SET
-          name = COALESCE(?, name),
-          username = ?,
-          password = ?,
-          role = ?,
-          companyId = ?
-        WHERE id = ?
-      `).run(name || targetUser.name, newUsername, hashedPassword, newRole, newCompanyId, id);
-    } else {
-      db.prepare(`
-        UPDATE users SET
-          name = COALESCE(?, name),
-          username = ?,
-          role = ?,
-          companyId = ?
-        WHERE id = ?
-      `).run(name || targetUser.name, newUsername, newRole, newCompanyId, id);
+      updateData.password = bcrypt.hashSync(password, 10);
     }
 
-    const updated = db.prepare(`
-      SELECT u.id, u.username, u.name, u.role, u.companyId, u.createdAt,
-             c.name as companyName
-      FROM users u
-      LEFT JOIN companies c ON u.companyId = c.id
-      WHERE u.id = ?
-    `).get(id);
+    const updated = await db.user.update({
+      where: { id },
+      data: updateData,
+      include: {
+        company: {
+          select: { name: true },
+        },
+      },
+    });
 
-    return NextResponse.json(updated);
+    return NextResponse.json({
+      id: updated.id,
+      username: updated.username,
+      name: updated.name,
+      role: updated.role,
+      companyId: updated.companyId,
+      createdAt: updated.createdAt,
+      companyName: updated.company?.name || null,
+    });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -117,7 +120,7 @@ export async function DELETE(
     return NextResponse.json({ error: 'Você não pode excluir o seu próprio usuário logado.' }, { status: 400 });
   }
 
-  const targetUser: any = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+  const targetUser = await db.user.findUnique({ where: { id } });
   if (!targetUser) {
     return NextResponse.json({ error: 'Usuário não encontrado.' }, { status: 404 });
   }
@@ -135,6 +138,10 @@ export async function DELETE(
     }
   }
 
-  db.prepare('DELETE FROM users WHERE id = ?').run(id);
-  return NextResponse.json({ success: true });
+  try {
+    await db.user.delete({ where: { id } });
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 }

@@ -1,4 +1,4 @@
-﻿import { NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import db from '@/lib/db';
 import { getSession } from '@/lib/auth';
 
@@ -11,34 +11,29 @@ export async function PUT(
 
   const { id } = await params;
 
-  // Apenas Super Admin ou o Admin da própria empresa pode editar
   if (session.role !== 'SUPER_ADMIN' && session.companyId !== id) {
     return NextResponse.json({ error: 'Permissão negada.' }, { status: 403 });
   }
 
-  const data = await request.json();
-  const { name, document, email, phone, active } = data;
+  try {
+    const data = await request.json();
+    const { name, document, email, phone, active } = data;
 
-  db.prepare(`
-    UPDATE companies SET
-      name = COALESCE(?, name),
-      document = ?,
-      email = ?,
-      phone = ?,
-      active = COALESCE(?, active),
-      updatedAt = CURRENT_TIMESTAMP
-    WHERE id = ?
-  `).run(
-    name,
-    document,
-    email,
-    phone,
-    session.role === 'SUPER_ADMIN' ? active : undefined,
-    id
-  );
+    const updated = await db.company.update({
+      where: { id },
+      data: {
+        name: name !== undefined ? name : undefined,
+        document: document !== undefined ? document : undefined,
+        email: email !== undefined ? email : undefined,
+        phone: phone !== undefined ? phone : undefined,
+        active: session.role === 'SUPER_ADMIN' && active !== undefined ? Boolean(active) : undefined,
+      },
+    });
 
-  const updated = db.prepare('SELECT * FROM companies WHERE id = ?').get(id);
-  return NextResponse.json(updated);
+    return NextResponse.json(updated);
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 }
 
 export async function DELETE(
@@ -57,6 +52,12 @@ export async function DELETE(
     return NextResponse.json({ error: 'A empresa matriz padrão não pode ser excluída.' }, { status: 400 });
   }
 
-  db.prepare('DELETE FROM companies WHERE id = ?').run(id);
-  return NextResponse.json({ success: true });
+  try {
+    await db.company.delete({
+      where: { id },
+    });
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 }

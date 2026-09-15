@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
 import { getSession } from '@/lib/auth';
-import { randomUUID } from 'crypto';
 
 export async function POST(
   request: Request,
@@ -18,7 +17,7 @@ export async function POST(
     return NextResponse.json({ error: 'A nova data de vencimento é obrigatória.' }, { status: 400 });
   }
 
-  const cert = db.prepare('SELECT * FROM certificates WHERE id = ?').get(id) as any;
+  const cert = await db.certificate.findUnique({ where: { id } });
   if (!cert) {
     return NextResponse.json({ error: 'Certificado não encontrado' }, { status: 404 });
   }
@@ -29,45 +28,48 @@ export async function POST(
 
   const previousDate = cert.expirationDate;
 
-  // Atualizar o certificado principal com a nova data e status ativo
-  db.prepare(`
-    UPDATE certificates SET
-      expirationDate = ?,
-      issueDate = COALESCE(?, issueDate),
-      status = 'ACTIVE',
-      attachmentUrl = COALESCE(?, attachmentUrl),
-      attachmentName = COALESCE(?, attachmentName),
-      notes = COALESCE(?, notes),
-      updatedAt = CURRENT_TIMESTAMP
-    WHERE id = ?
-  `).run(
-    newExpirationDate,
-    newIssueDate || null,
-    attachmentUrl || null,
-    attachmentName || null,
-    notes ? `${cert.notes || ''}\n[Renovação em ${new Date().toLocaleDateString('pt-BR')}]: ${notes}`.trim() : cert.notes,
-    id
-  );
+  try {
+    const renewalNote = notes
+      ? `${cert.notes || ''}\n[Renovação em ${new Date().toLocaleDateString('pt-BR')}]: ${notes}`.trim()
+      : cert.notes;
 
-  // Inserir registro no histórico para auditoria e linha do tempo de renovações
-  const historyId = randomUUID();
-  db.prepare(`
-    INSERT INTO certificate_history (id, certificateId, action, previousDate, newDate, notes)
-    VALUES (?, ?, 'RENEWAL', ?, ?, ?)
-  `).run(
-    historyId,
-    id,
-    previousDate,
-    newExpirationDate,
-    notes || 'Certificado renovado com nova data de expiração'
-  );
+    const result = await db.$transaction(async (tx) => {
+      const updatedCert = await tx.certificate.update({
+        where: { id },
+        data: {
+          expirationDate: newExpirationDate,
+          issueDate: newIssueDate || cert.issueDate,
+          status: 'ACTIVE',
+          attachmentUrl: attachmentUrl || cert.attachmentUrl,
+          attachmentName: attachmentName || cert.attachmentName,
+          notes: renewalNote,
+        },
+      });
 
-  const updatedCert = db.prepare('SELECT * FROM certificates WHERE id = ?').get(id);
-  const histories = db.prepare('SELECT * FROM certificate_history WHERE certificateId = ? ORDER BY createdAt DESC').all(id);
+      await tx.certificateHistory.create({
+        data: {
+          certificateId: id,
+          action: 'RENEWAL',
+          previousDate,
+          newDate: newExpirationDate,
+          notes: notes || 'Certificado renovado com nova data de expiração',
+        },
+      });
 
-  return NextResponse.json({
-    certificate: updatedCert,
-    histories,
-    message: 'Certificado renovado com sucesso!'
-  });
+      const histories = await tx.certificateHistory.findMany({
+        where: { certificateId: id },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      return { updatedCert, histories };
+    });
+
+    return NextResponse.json({
+      certificate: result.updatedCert,
+      histories: result.histories,
+      message: 'Certificado renovado com sucesso!',
+    });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 }

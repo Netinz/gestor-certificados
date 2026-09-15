@@ -1,36 +1,54 @@
-﻿import { NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import db from '@/lib/db';
 import { getSession } from '@/lib/auth';
-import { randomUUID } from 'crypto';
 
 export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
-  // Somente super admin pode listar todas as empresas
-  if (session.role !== 'SUPER_ADMIN') {
-    // Se for administrador da própria empresa, retorna apenas os dados da sua empresa
-    const myCompany = db.prepare(`
-      SELECT c.*,
-        (SELECT COUNT(*) FROM users WHERE companyId = c.id) as userCount,
-        (SELECT COUNT(*) FROM clients WHERE companyId = c.id) as clientCount,
-        (SELECT COUNT(*) FROM certificates WHERE companyId = c.id) as certificateCount
-      FROM companies c
-      WHERE c.id = ?
-    `).get(session.companyId);
-    return NextResponse.json(myCompany ? [myCompany] : []);
+  try {
+    if (session.role !== 'SUPER_ADMIN') {
+      if (!session.companyId) return NextResponse.json([]);
+      const myCompany = await db.company.findUnique({
+        where: { id: session.companyId },
+        include: {
+          _count: {
+            select: { users: true, clients: true, certificates: true },
+          },
+        },
+      });
+
+      if (!myCompany) return NextResponse.json([]);
+      return NextResponse.json([
+        {
+          ...myCompany,
+          userCount: myCompany._count.users,
+          clientCount: myCompany._count.clients,
+          certificateCount: myCompany._count.certificates,
+        },
+      ]);
+    }
+
+    const companies = await db.company.findMany({
+      orderBy: { name: 'asc' },
+      include: {
+        _count: {
+          select: { users: true, clients: true, certificates: true },
+        },
+      },
+    });
+
+    const formatted = companies.map((c) => ({
+      ...c,
+      userCount: c._count.users,
+      clientCount: c._count.clients,
+      certificateCount: c._count.certificates,
+    }));
+
+    return NextResponse.json(formatted);
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
-
-  const companies = db.prepare(`
-    SELECT c.*,
-      (SELECT COUNT(*) FROM users WHERE companyId = c.id) as userCount,
-      (SELECT COUNT(*) FROM clients WHERE companyId = c.id) as clientCount,
-      (SELECT COUNT(*) FROM certificates WHERE companyId = c.id) as certificateCount
-    FROM companies c
-    ORDER BY c.name ASC
-  `).all();
-
-  return NextResponse.json(companies);
 }
 
 export async function POST(request: Request) {
@@ -38,7 +56,10 @@ export async function POST(request: Request) {
   if (!session) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
 
   if (session.role !== 'SUPER_ADMIN') {
-    return NextResponse.json({ error: 'Apenas o Administrador do Sistema pode cadastrar novas empresas.' }, { status: 403 });
+    return NextResponse.json(
+      { error: 'Apenas o Administrador do Sistema pode cadastrar novas empresas.' },
+      { status: 403 }
+    );
   }
 
   try {
@@ -49,13 +70,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'O nome da empresa é obrigatório.' }, { status: 400 });
     }
 
-    const id = randomUUID();
-    db.prepare(`
-      INSERT INTO companies (id, name, document, email, phone, active)
-      VALUES (?, ?, ?, ?, ?, 1)
-    `).run(id, name.trim(), document || null, email || null, phone || null);
+    const created = await db.company.create({
+      data: {
+        name: name.trim(),
+        document: document || null,
+        email: email || null,
+        phone: phone || null,
+        active: true,
+      },
+    });
 
-    const created = db.prepare('SELECT * FROM companies WHERE id = ?').get(id);
     return NextResponse.json(created, { status: 201 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

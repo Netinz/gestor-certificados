@@ -18,41 +18,49 @@ export async function GET(request: Request) {
     targetCompanyId = session.companyId || null;
   }
 
-  // Configurações globais padrão
-  const globalSettings = db.prepare('SELECT * FROM settings').all() as any[];
-  const settingsMap: Record<string, any> = {};
-  for (const s of globalSettings) {
-    settingsMap[s.key] = s.value;
-  }
+  try {
+    const globalSettings = await db.setting.findMany();
+    const settingsMap: Record<string, any> = {};
+    for (const s of globalSettings) {
+      settingsMap[s.key] = s.value;
+    }
 
-  const defaultWhatsappTemplate = settingsMap['whatsapp_template'] || '';
-  let isCustom = false;
-  let companyName: string | null = null;
+    const defaultWhatsappTemplate = settingsMap['whatsapp_template'] || '';
+    let isCustom = false;
+    let companyName: string | null = null;
 
-  if (targetCompanyId) {
-    const comp: any = db.prepare('SELECT name FROM companies WHERE id = ?').get(targetCompanyId);
-    companyName = comp?.name || null;
+    if (targetCompanyId) {
+      const comp = await db.company.findUnique({
+        where: { id: targetCompanyId },
+        select: { name: true },
+      });
+      companyName = comp?.name || null;
 
-    // Buscar configurações específicas da empresa
-    const companySettings = db.prepare('SELECT * FROM company_settings WHERE companyId = ?').all(targetCompanyId) as any[];
-    for (const cs of companySettings) {
-      settingsMap[cs.key] = cs.value;
-      if (cs.key === 'whatsapp_template') {
-        isCustom = true;
+      const companySettings = await db.companySetting.findMany({
+        where: { companyId: targetCompanyId },
+      });
+
+      for (const cs of companySettings) {
+        settingsMap[cs.key] = cs.value;
+        if (cs.key === 'whatsapp_template') {
+          isCustom = true;
+        }
       }
     }
-  }
 
-  return NextResponse.json({
-    ...settingsMap,
-    _meta: {
-      targetCompanyId,
-      companyName,
-      isCustom,
-      defaultTemplate: defaultWhatsappTemplate,
-      isGlobal: !targetCompanyId
-    }
-  });
+    return NextResponse.json({
+      ...settingsMap,
+      _meta: {
+        targetCompanyId,
+        companyName,
+        isCustom,
+        defaultTemplate: defaultWhatsappTemplate,
+        isGlobal: !targetCompanyId,
+      },
+    });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 }
 
 export async function POST(request: Request) {
@@ -73,39 +81,37 @@ export async function POST(request: Request) {
     }
 
     if (targetCompanyId) {
-      // Salvar especificamente para a empresa na tabela company_settings
-      const updateStmt = db.prepare(`
-        INSERT INTO company_settings (companyId, key, value, updatedAt)
-        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-        ON CONFLICT(companyId, key) DO UPDATE SET
-          value = excluded.value,
-          updatedAt = CURRENT_TIMESTAMP
-      `);
-
-      const updateMany = db.transaction((entries: [string, any][]) => {
-        for (const [key, value] of entries) {
-          updateStmt.run(targetCompanyId, key, String(value));
-        }
-      });
-
-      updateMany(Object.entries(settingsData));
+      for (const [key, value] of Object.entries(settingsData)) {
+        await db.companySetting.upsert({
+          where: {
+            companyId_key: {
+              companyId: targetCompanyId,
+              key,
+            },
+          },
+          update: {
+            value: String(value),
+          },
+          create: {
+            companyId: targetCompanyId,
+            key,
+            value: String(value),
+          },
+        });
+      }
     } else {
-      // Super admin salvando modelo padrão global
-      const updateStmt = db.prepare(`
-        INSERT INTO settings (key, value, updatedAt)
-        VALUES (?, ?, CURRENT_TIMESTAMP)
-        ON CONFLICT(key) DO UPDATE SET
-          value = excluded.value,
-          updatedAt = CURRENT_TIMESTAMP
-      `);
-
-      const updateMany = db.transaction((entries: [string, any][]) => {
-        for (const [key, value] of entries) {
-          updateStmt.run(key, String(value));
-        }
-      });
-
-      updateMany(Object.entries(settingsData));
+      for (const [key, value] of Object.entries(settingsData)) {
+        await db.setting.upsert({
+          where: { key },
+          update: {
+            value: String(value),
+          },
+          create: {
+            key,
+            value: String(value),
+          },
+        });
+      }
     }
 
     return NextResponse.json({ success: true, targetCompanyId });
@@ -130,14 +136,25 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: 'Permissão negada' }, { status: 403 });
   }
 
-  db.prepare('DELETE FROM company_settings WHERE companyId = ? AND key = ?').run(companyId, key);
+  try {
+    await db.companySetting.deleteMany({
+      where: {
+        companyId,
+        key,
+      },
+    });
 
-  // Retorna o valor padrão para atualizar a tela
-  const defaultSetting: any = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
+    const defaultSetting = await db.setting.findUnique({
+      where: { key },
+      select: { value: true },
+    });
 
-  return NextResponse.json({
-    success: true,
-    reset: true,
-    defaultValue: defaultSetting?.value || ''
-  });
+    return NextResponse.json({
+      success: true,
+      reset: true,
+      defaultValue: defaultSetting?.value || '',
+    });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 }
